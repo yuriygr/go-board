@@ -45,6 +45,7 @@ func main() {
 		r.Mount("/pages", pagesResource{storage, session}.Routes())
 		r.Mount("/bugs", bugsResource{storage, session}.Routes())
 		r.Mount("/users", usersResource{storage, session}.Routes())
+		//r.Mount("/sessions", sessionResource{storage, session}.Routes())
 	})
 
 	http.ListenAndServe(":3000", r)

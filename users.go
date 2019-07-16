@@ -1,7 +1,11 @@
 package main
 
 import (
+	"errors"
 	"net/http"
+	"time"
+
+	"github.com/yuriygr/go-board/utils"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/render"
@@ -25,25 +29,19 @@ func (rs usersResource) Routes() chi.Router {
 // Handler methods
 //--
 
-// UserState - Состояние юзера
-type UserState struct {
-	UserID int
-	Auth   bool
-}
-
 // UserLogin - Создание пользователя
 func (rs *usersResource) UserLogin(w http.ResponseWriter, r *http.Request) {
 
 	sessionNew, _ := rs.session.Auth(r)
-	sessionNew.Values["user_id"] = 1
+	/*sessionNew.Values["user_id"] = 1
 	sessionNew.Values["auth"] = true
-	sessionNew.Save(r, w)
+	sessionNew.Save(r, w)*/
 
 	render.Render(w, r, &SuccessResponse{
-		HTTPStatusCode: 201,
-		StatusText:     "Created",
-		Payload: &UserState{
-			UserID: sessionNew.Values["user_id"].(int),
+		HTTPStatusCode: 200,
+		StatusText:     "Ok!",
+		Payload: &SessionResponse{
+			UserID: sessionNew.Values["user_id"].(int32),
 			Auth:   sessionNew.Values["auth"].(bool),
 		},
 	})
@@ -51,7 +49,7 @@ func (rs *usersResource) UserLogin(w http.ResponseWriter, r *http.Request) {
 
 // UserCreate - Создание пользователя
 func (rs *usersResource) UserCreate(w http.ResponseWriter, r *http.Request) {
-	request := &UserCreateRequest{}
+	request := &User{}
 	if err := request.Bind(r); err != nil {
 		render.Render(w, r, ErrBadRequest(err))
 		return
@@ -63,21 +61,23 @@ func (rs *usersResource) UserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	/*sessionNew, _ := rs.session.Auth(r)
-	userState := &UserState{}
+	// Ok, user created successfully...
+	// Let's create session!
 
-	if sessionNew.Values["user_id"] != nil {
-		userState.UserID = sessionNew.Values["user_id"].(int)
-	}
-
-	if sessionNew.Values["auth"] != nil {
-		userState.Auth = sessionNew.Values["auth"].(bool)
-	}*/
+	sessionNew, _ := rs.session.Auth(r)
+	sessionNew.Values["user_id"] = user.ID
+	sessionNew.Values["username"] = user.Username
+	sessionNew.Values["auth"] = true
+	sessionNew.Save(r, w)
 
 	render.Render(w, r, &SuccessResponse{
 		HTTPStatusCode: 201,
 		StatusText:     "Created",
-		Payload:        user,
+		Payload: &SessionResponse{
+			UserID:   sessionNew.Values["user_id"].(int32),
+			Username: sessionNew.Values["username"].(string),
+			Auth:     sessionNew.Values["auth"].(bool),
+		},
 	})
 }
 
@@ -87,13 +87,47 @@ func (rs *usersResource) UserCreate(w http.ResponseWriter, r *http.Request) {
 
 // User sructure
 type User struct {
-	ID        int64  `db:"u.id"`
-	Username  string `db:"u.username"`
-	Password  string `db:"u.password"`
-	Email     string `db:"u.email"`
-	CreatedAt int64  `db:"u.created_at"`
+	ID        int32  `json:"-" db:"u.id"`
+	Username  string `json:"username" db:"u.username"`
+	Password  string `json:"-" db:"u.password"`
+	Email     string `json:"email" db:"u.email"`
+	CreatedAt int64  `json:"-" db:"u.created_at"`
 	States    struct {
-		IsBanned  int8 `db:"u.is_banned"`
-		IsDeleted int8 `db:"u.is_deleted"`
-	} `db:""`
+		IsBanned  int8 `json:"is_banned" db:"u.is_banned"`
+		IsDeleted int8 `json:"is_deleted" db:"u.is_deleted"`
+	} `json:"states" db:""`
+}
+
+// Render - Render, wtf
+func (u *User) Render(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+// Bind - Bind HTTP request data and validate it
+func (u *User) Bind(r *http.Request) error {
+	u.Username = r.FormValue("username")
+	u.CreatedAt = time.Now().Unix()
+	u.States.IsBanned = 0
+	u.States.IsDeleted = 0
+
+	password, err := utils.HashPassword(r.FormValue("password"))
+	if err != nil {
+		return errors.New("Password to fucking shitty")
+	}
+	u.Password = password
+
+	if u.Username == "" {
+		return errors.New("Username must be filled")
+	}
+	if u.Password == "" {
+		return errors.New("Password must be filled")
+	}
+	return nil
+}
+
+// SessionResponse - Состояние юзера
+type SessionResponse struct {
+	UserID   int32  `json:"id"`
+	Username string `json:"username"`
+	Auth     bool   `json:"auth"`
 }

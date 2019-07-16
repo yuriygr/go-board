@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/render"
@@ -64,4 +66,28 @@ func (rs *bugsResource) BugsCreate(w http.ResponseWriter, r *http.Request) {
 // Bug structure
 type Bug struct {
 	Number int `json:"number"`
+}
+
+// BugCreateRequest - Request for create bug report method
+type BugCreateRequest struct {
+	IP                 string
+	Description, Email string
+	CreatedAt          int64
+}
+
+// Bind - Bind HTTP request data and validate it
+func (p *BugCreateRequest) Bind(r *http.Request) error {
+	p.IP = r.RemoteAddr
+	p.Description = r.FormValue("description")
+	p.Email = r.FormValue("email")
+	p.CreatedAt = time.Now().Unix()
+
+	if p.Description == "" {
+		return errors.New("Description must be filled")
+	}
+	if len(p.Description) < 15 {
+		return errors.New("Description is too short")
+	}
+
+	return nil
 }

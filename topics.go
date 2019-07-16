@@ -205,7 +205,7 @@ func (rs *topicsResource) ReportCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 //--
-// Struct
+// Topic structure
 //--
 
 // Topic structure
@@ -282,6 +282,10 @@ func NewTopicsListResponse(topics []*Topic) []render.Renderer {
 	}
 	return list
 }
+
+//--
+// Comment structure
+//--
 
 // Comment structure
 type Comment struct {

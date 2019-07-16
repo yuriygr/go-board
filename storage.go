@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"time"
 
@@ -17,12 +16,14 @@ const (
 	selectPages    = "select p.* from pages as p"
 	selectTopics   = "select t.*, b.title, b.slug, COUNT(c.id) as comments_count from topics as t left join boards as b on t.board_id = b.id left join comments as c on c.topic_id = t.id"
 	selectComments = "select c.* from comments as c"
+	selectUsers    = "select u.* from users as u"
 
 	selectPageBySlug        = selectPages + " where p.slug = '%s'"
 	selectTopicsByID        = selectTopics + " where t.id = '%d' group by t.id"
 	selectTopicsPaginated   = selectTopics + " group by t.id order by t.is_pinned desc, %s desc limit %d"
 	selectCommentByID       = selectComments + " where c.id = '%d'"
 	selectCommentsByTopicID = selectComments + " where c.topic_id = '%d' order by c.is_pinned desc, c.created_at asc"
+	selectUserByID          = selectUsers + " where u.id = '%d'"
 )
 
 // NewStorage - init new storage
@@ -62,7 +63,7 @@ func (s *Storage) GetBoardsList() ([]*Board, error) {
 // Page methods
 //--
 
-// GetPageBySlug - Возвращает страницу по Slug
+// GetPageBySlug - Return page by Slug
 func (s *Storage) GetPageBySlug(slug string) (*Page, error) {
 	page := Page{}
 	sql := fmt.Sprintf(selectPageBySlug, slug)
@@ -86,7 +87,7 @@ type TopicsRequest struct {
 	Limit int8
 }
 
-// GetTopicsList - Получает список топиков с параметрами
+// GetTopicsList - Return topics list with params
 func (s *Storage) GetTopicsList(request *TopicsRequest) ([]*Topic, error) {
 	topics := []*Topic{}
 	sql := fmt.Sprintf(selectTopicsPaginated, request.Sort, request.Limit)
@@ -99,7 +100,7 @@ func (s *Storage) GetTopicsList(request *TopicsRequest) ([]*Topic, error) {
 	return topics, nil
 }
 
-// GetTopicByID - Возвращает топик по Id
+// GetTopicByID - Return topic by ID
 func (s *Storage) GetTopicByID(id int64) (*Topic, error) {
 	topic := Topic{}
 	sql := fmt.Sprintf(selectTopicsByID, id)
@@ -112,7 +113,7 @@ func (s *Storage) GetTopicByID(id int64) (*Topic, error) {
 	return &topic, nil
 }
 
-// CreateTopic - Create topic with data
+// CreateTopic - Create topic and return him, or error
 func (s *Storage) CreateTopic(request *Topic) (*Topic, error) {
 	result, err := s.db.NamedExec(`INSERT INTO topics (type, board_id, subject, message, created_at, bumped_at, user_ip, is_closed, is_pinned, is_deleted, allow_attach, comments_closed) VALUES (:t.type, :t.board_id, :t.subject, :t.message, :t.created_at, :t.bumped_at, :t.user_ip, :t.is_closed, :t.is_pinned, :t.is_deleted, :t.allow_attach, :t.comments_closed)`, request)
 	if err != nil {
@@ -136,7 +137,7 @@ func (s *Storage) CreateTopic(request *Topic) (*Topic, error) {
 // Comments methods
 // --
 
-// GetCommentsList -
+// GetCommentsList - Return list of comments by topic ID
 func (s *Storage) GetCommentsList(id int) ([]*Comment, error) {
 	comments := []*Comment{}
 	sql := fmt.Sprintf(selectCommentsByTopicID, id)
@@ -149,7 +150,7 @@ func (s *Storage) GetCommentsList(id int) ([]*Comment, error) {
 	return comments, nil
 }
 
-// GetCommentByID - Возвращает топик по Id
+// GetCommentByID - Return comment by ID
 func (s *Storage) GetCommentByID(id int64) (*Comment, error) {
 	comment := Comment{}
 	sql := fmt.Sprintf(selectCommentByID, id)
@@ -162,7 +163,7 @@ func (s *Storage) GetCommentByID(id int64) (*Comment, error) {
 	return &comment, nil
 }
 
-// CreateComment - Create comemnt with data
+// CreateComment - Create comment and return him, or error
 func (s *Storage) CreateComment(request *Comment) (*Comment, error) {
 	result, err := s.db.NamedExec(`INSERT INTO comments (topic_id, message, created_at, user_ip, is_pinned, is_deleted) VALUES (:c.topic_id, :c.message, :c.created_at, :c.user_ip, :c.is_pinned, :c.is_deleted)`, request)
 	if err != nil {
@@ -183,34 +184,10 @@ func (s *Storage) CreateComment(request *Comment) (*Comment, error) {
 }
 
 //--
-// Bugs methods & structs
+// Bugs methods
 //--
 
-// BugCreateRequest - Request for create bug report method
-type BugCreateRequest struct {
-	IP                 string
-	Description, Email string
-	CreatedAt          int64
-}
-
-// Bind - Bind HTTP request data and validate it
-func (p *BugCreateRequest) Bind(r *http.Request) error {
-	p.IP = r.RemoteAddr
-	p.Description = r.FormValue("description")
-	p.Email = r.FormValue("email")
-	p.CreatedAt = time.Now().Unix()
-
-	if p.Description == "" {
-		return errors.New("Description must be filled")
-	}
-	if len(p.Description) < 15 {
-		return errors.New("Description is too short")
-	}
-
-	return nil
-}
-
-// GetBugByID - Возвращает Bug по Id
+// GetBugByID - Return bug by ID
 func (s *Storage) GetBugByID(id int) (*Bug, error) {
 	return &Bug{Number: 1}, errors.New("Bug not found")
 }
@@ -222,31 +199,38 @@ func (s *Storage) CreateBugReport(request *BugCreateRequest) (*Bug, error) {
 }
 
 //--
-// Users methods & structs
+// Users methods
 //--
 
-// UserCreateRequest - Request for create user
-type UserCreateRequest struct {
-	Login     string
-	Password  string
-	CreatedAt int64
+// GetUserByID - Return user by ID
+func (s *Storage) GetUserByID(id int64) (*User, error) {
+	user := User{}
+	sql := fmt.Sprintf(selectUserByID, id)
+
+	err := s.db.Get(&user, sql)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
 }
 
-// Bind - Bind HTTP request data and validate it
-func (p *UserCreateRequest) Bind(r *http.Request) error {
-	p.Login = r.FormValue("login")
-	p.Password = r.FormValue("password")
-	p.CreatedAt = time.Now().Unix()
-
-	if p.Login == "" {
-		return errors.New("Login must be filled")
+// CreateUser - Create user and return him, or error
+func (s *Storage) CreateUser(request *User) (*User, error) {
+	result, err := s.db.NamedExec(`INSERT INTO users (username, password, email, created_at, is_banned, is_deleted) VALUES (:u.username, :u.password, :u.email, :u.created_at, :u.is_banned, :u.is_deleted)`, request)
+	if err != nil {
+		return nil, err
 	}
-	if p.Password == "" {
-		return errors.New("Password must be filled")
-	}
-	return nil
-}
 
-func (s *Storage) CreateUser(request *UserCreateRequest) (*User, error) {
-	return &User{}, nil
+	userID, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.GetUserByID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
