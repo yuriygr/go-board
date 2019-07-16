@@ -5,19 +5,17 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/gorilla/sessions"
 	"gopkg.in/boj/redistore.v1"
 )
 
 var (
-	key      = os.Getenv("SESSION_KEY")
-	size     = os.Getenv("REDIS_SIZE")
-	host     = os.Getenv("REDIS_HOST")
-	port     = os.Getenv("REDIS_PORT")
-	pass     = os.Getenv("REDIS_PASS")
-	lifetime = os.Getenv("REDIS_LIFETIME")
+	key  = os.Getenv("SESSION_KEY")
+	size = os.Getenv("REDIS_SIZE")
+	host = os.Getenv("REDIS_HOST")
+	port = os.Getenv("REDIS_PORT")
+	pass = os.Getenv("REDIS_PASS")
 )
 
 // NewSession - init new cookie storage
@@ -28,8 +26,10 @@ func NewSession() *Session {
 		log.Fatalln(err)
 	}
 
-	if lifetime, err := strconv.Atoi(lifetime); err != nil {
-		session.SetMaxAge(lifetime)
+	session.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 256, // 256 Days
+		HttpOnly: true,
 	}
 
 	return &Session{rs: session}

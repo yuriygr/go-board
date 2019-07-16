@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/render"
@@ -135,7 +136,7 @@ func (rs *topicsResource) TopicGet(w http.ResponseWriter, r *http.Request) {
 
 // TopicCreate - Создает объект топика
 func (rs *topicsResource) TopicCreate(w http.ResponseWriter, r *http.Request) {
-	request := &TopicCreateRequest{}
+	request := &Topic{}
 	if err := request.Bind(r); err != nil {
 		render.Render(w, r, ErrBadRequest(err))
 		return
@@ -171,7 +172,7 @@ func (rs *topicsResource) TopicCommentsGet(w http.ResponseWriter, r *http.Reques
 
 // CommentCreate - Создает объект комментария
 func (rs *topicsResource) CommentCreate(w http.ResponseWriter, r *http.Request) {
-	request := &CommentCreateRequest{}
+	request := &Comment{}
 	if err := request.Bind(r); err != nil {
 		render.Render(w, r, ErrBadRequest(err))
 		return
@@ -243,6 +244,36 @@ func (t *Topic) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// Bind - Bind HTTP request data and validate it
+func (t *Topic) Bind(r *http.Request) error {
+	// Bind
+	t.Type = "normal"
+	t.BoardID = 7
+	t.Subject = r.FormValue("subject")
+	t.Message = r.FormValue("message")
+	t.CreatedAt = time.Now().Unix()
+	t.BumpedAt = time.Now().Unix()
+	t.UserIP = r.RemoteAddr
+	t.States.IsClosed = 0
+	t.States.IsPinned = 0
+	t.States.IsDeleted = 0
+	t.Options.AllowAttach = 1
+	t.Options.CommentsClosed = 0
+
+	// Validate
+	if t.Subject == "" {
+		return errors.New("Subject must be filled")
+	}
+	if t.Message == "" {
+		return errors.New("Message must be filled")
+	}
+	if len(t.Message) < 15 {
+		return errors.New("Message is too short")
+	}
+
+	return nil
+}
+
 // NewTopicsListResponse -
 func NewTopicsListResponse(topics []*Topic) []render.Renderer {
 	list := []render.Renderer{}
@@ -255,7 +286,7 @@ func NewTopicsListResponse(topics []*Topic) []render.Renderer {
 // Comment structure
 type Comment struct {
 	ID        int    `json:"id" db:"c.id"`
-	TopicID   int    `json:"-" db:"c.topic_id"`
+	TopicID   int    `json:"topic_id" db:"c.topic_id"`
 	Message   string `json:"message" db:"c.message"`
 	CreatedAt int64  `json:"created_at" db:"c.created_at"`
 	UserIP    string `json:"-" db:"c.user_ip"`
@@ -267,6 +298,30 @@ type Comment struct {
 
 // Render - Render, wtf
 func (c *Comment) Render(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+// Bind - Bind HTTP request data and validate it
+func (c *Comment) Bind(r *http.Request) error {
+	c.Message = r.FormValue("message")
+	c.CreatedAt = time.Now().Unix()
+	c.UserIP = r.RemoteAddr
+	c.States.IsPinned = 0
+	c.States.IsDeleted = 0
+
+	if topicID := chi.URLParam(r, "topicID"); topicID != "" {
+		topicID, _ := strconv.Atoi(topicID)
+		c.TopicID = topicID
+	} else {
+		return errors.New("You must specify the number of the topic")
+	}
+
+	if c.Message == "" {
+		return errors.New("Message must be filled")
+	}
+	if len(c.Message) < 15 {
+		return errors.New("Message is too short")
+	}
 	return nil
 }
 
