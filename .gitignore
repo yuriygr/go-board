@@ -1,5 +1,6 @@
 .env
-server
-debug
 .DS_Store
 .vscode
+go.sum
+server
+debug

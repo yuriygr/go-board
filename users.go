@@ -29,26 +29,68 @@ func (rs usersResource) Routes() chi.Router {
 // Handler methods
 //--
 
-// UserLogin - Создание пользователя
+// UserLogin - Login user
 func (rs *usersResource) UserLogin(w http.ResponseWriter, r *http.Request) {
+	if !rs.IsLoggined(r) {
+		err := errors.New("You are already logged in, where will you go again?")
+		render.Render(w, r, ErrBadRequest(err))
+		return
+	}
+
+	username := r.FormValue("username")
+	user, err := rs.storage.GetUserByUsername(username)
+	if err != nil {
+		err := errors.New("This account does not exist")
+		render.Render(w, r, ErrBadRequest(err))
+		return
+	}
+
+	password := r.FormValue("password")
+	if !utils.CheckPasswordHash(password, user.Password) {
+		err := errors.New("Invalid username or password")
+		render.Render(w, r, ErrBadRequest(err))
+		return
+	}
+
+	if user.States.IsBanned {
+		err := errors.New("Sorry Mario, the Princess is in another castle")
+		render.Render(w, r, ErrBadRequest(err))
+		return
+	}
+
+	if user.States.IsDeleted {
+		err := errors.New("This account does not exist")
+		render.Render(w, r, ErrBadRequest(err))
+		return
+	}
+	// Ok, user exist and password correct...
+	// Let's create session!
 
 	sessionNew, _ := rs.session.Auth(r)
-	/*sessionNew.Values["user_id"] = 1
+	sessionNew.Values["user_id"] = user.ID
+	sessionNew.Values["username"] = user.Username
 	sessionNew.Values["auth"] = true
-	sessionNew.Save(r, w)*/
+	sessionNew.Save(r, w)
 
 	render.Render(w, r, &SuccessResponse{
 		HTTPStatusCode: 200,
 		StatusText:     "Ok!",
 		Payload: &SessionResponse{
-			UserID: sessionNew.Values["user_id"].(int32),
-			Auth:   sessionNew.Values["auth"].(bool),
+			UserID:   sessionNew.Values["user_id"].(int32),
+			Username: sessionNew.Values["username"].(string),
+			Auth:     sessionNew.Values["auth"].(bool),
 		},
 	})
 }
 
 // UserCreate - Создание пользователя
 func (rs *usersResource) UserCreate(w http.ResponseWriter, r *http.Request) {
+	if !rs.IsLoggined(r) {
+		err := errors.New("You are already logged in, where will you go again?")
+		render.Render(w, r, ErrBadRequest(err))
+		return
+	}
+
 	request := &User{}
 	if err := request.Bind(r); err != nil {
 		render.Render(w, r, ErrBadRequest(err))
@@ -72,13 +114,19 @@ func (rs *usersResource) UserCreate(w http.ResponseWriter, r *http.Request) {
 
 	render.Render(w, r, &SuccessResponse{
 		HTTPStatusCode: 201,
-		StatusText:     "Created",
+		StatusText:     "User created, let's go!",
 		Payload: &SessionResponse{
 			UserID:   sessionNew.Values["user_id"].(int32),
 			Username: sessionNew.Values["username"].(string),
 			Auth:     sessionNew.Values["auth"].(bool),
 		},
 	})
+}
+
+// IsLoggined - Проверям, залогинен или нет
+func (rs *usersResource) IsLoggined(r *http.Request) bool {
+	sessionNew, _ := rs.session.Auth(r)
+	return sessionNew.Values["auth"] == nil
 }
 
 //--
@@ -90,11 +138,10 @@ type User struct {
 	ID        int32  `json:"-" db:"u.id"`
 	Username  string `json:"username" db:"u.username"`
 	Password  string `json:"-" db:"u.password"`
-	Email     string `json:"email" db:"u.email"`
 	CreatedAt int64  `json:"-" db:"u.created_at"`
 	States    struct {
-		IsBanned  int8 `json:"is_banned" db:"u.is_banned"`
-		IsDeleted int8 `json:"is_deleted" db:"u.is_deleted"`
+		IsBanned  bool `json:"is_banned" db:"u.is_banned"`
+		IsDeleted bool `json:"is_deleted" db:"u.is_deleted"`
 	} `json:"states" db:""`
 }
 
@@ -105,23 +152,24 @@ func (u *User) Render(w http.ResponseWriter, r *http.Request) error {
 
 // Bind - Bind HTTP request data and validate it
 func (u *User) Bind(r *http.Request) error {
-	u.Username = r.FormValue("username")
-	u.CreatedAt = time.Now().Unix()
-	u.States.IsBanned = 0
-	u.States.IsDeleted = 0
+
+	if r.FormValue("username") == "" {
+		return errors.New("Username must be filled")
+	}
+	if r.FormValue("password") == "" {
+		return errors.New("Password must be filled")
+	}
 
 	password, err := utils.HashPassword(r.FormValue("password"))
 	if err != nil {
-		return errors.New("Password to fucking shitty")
+		return errors.New("Password to fucking shitty wtf")
 	}
-	u.Password = password
 
-	if u.Username == "" {
-		return errors.New("Username must be filled")
-	}
-	if u.Password == "" {
-		return errors.New("Password must be filled")
-	}
+	u.Password = password
+	u.Username = r.FormValue("username")
+	u.CreatedAt = time.Now().Unix()
+	u.States.IsBanned = false
+	u.States.IsDeleted = false
 	return nil
 }
 

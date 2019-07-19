@@ -24,6 +24,11 @@ const (
 	selectCommentByID       = selectComments + " where c.id = '%d'"
 	selectCommentsByTopicID = selectComments + " where c.topic_id = '%d' order by c.is_pinned desc, c.created_at asc"
 	selectUserByID          = selectUsers + " where u.id = '%d'"
+	selectUserByUsername    = selectUsers + " where u.username = '%s'"
+
+	insertComment = "INSERT INTO comments (topic_id, message, created_at, user_ip, is_pinned, is_deleted) VALUES (:c.topic_id, :c.message, :c.created_at, :c.user_ip, :c.is_pinned, :c.is_deleted)"
+	inserTopic    = "INSERT INTO topics (type, board_id, subject, message, created_at, bumped_at, user_ip, is_closed, is_pinned, is_deleted, allow_attach, comments_closed) VALUES (:t.type, :t.board_id, :t.subject, :t.message, :t.created_at, :t.bumped_at, :t.user_ip, :t.is_closed, :t.is_pinned, :t.is_deleted, :t.allow_attach, :t.comments_closed)"
+	inserUser     = "INSERT INTO users (username, password, created_at, is_banned, is_deleted) VALUES (:u.username, :u.password, :u.created_at, :u.is_banned, :u.is_deleted)"
 )
 
 // NewStorage - init new storage
@@ -115,7 +120,7 @@ func (s *Storage) GetTopicByID(id int64) (*Topic, error) {
 
 // CreateTopic - Create topic and return him, or error
 func (s *Storage) CreateTopic(request *Topic) (*Topic, error) {
-	result, err := s.db.NamedExec(`INSERT INTO topics (type, board_id, subject, message, created_at, bumped_at, user_ip, is_closed, is_pinned, is_deleted, allow_attach, comments_closed) VALUES (:t.type, :t.board_id, :t.subject, :t.message, :t.created_at, :t.bumped_at, :t.user_ip, :t.is_closed, :t.is_pinned, :t.is_deleted, :t.allow_attach, :t.comments_closed)`, request)
+	result, err := s.db.NamedExec(inserTopic, request)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +170,7 @@ func (s *Storage) GetCommentByID(id int64) (*Comment, error) {
 
 // CreateComment - Create comment and return him, or error
 func (s *Storage) CreateComment(request *Comment) (*Comment, error) {
-	result, err := s.db.NamedExec(`INSERT INTO comments (topic_id, message, created_at, user_ip, is_pinned, is_deleted) VALUES (:c.topic_id, :c.message, :c.created_at, :c.user_ip, :c.is_pinned, :c.is_deleted)`, request)
+	result, err := s.db.NamedExec(insertComment, request)
 	if err != nil {
 		return nil, err
 	}
@@ -202,6 +207,19 @@ func (s *Storage) CreateBugReport(request *BugCreateRequest) (*Bug, error) {
 // Users methods
 //--
 
+// GetUserByUsername - Return user by username
+func (s *Storage) GetUserByUsername(username string) (*User, error) {
+	user := User{}
+	sql := fmt.Sprintf(selectUserByUsername, username)
+
+	err := s.db.Get(&user, sql)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
 // GetUserByID - Return user by ID
 func (s *Storage) GetUserByID(id int64) (*User, error) {
 	user := User{}
@@ -217,7 +235,7 @@ func (s *Storage) GetUserByID(id int64) (*User, error) {
 
 // CreateUser - Create user and return him, or error
 func (s *Storage) CreateUser(request *User) (*User, error) {
-	result, err := s.db.NamedExec(`INSERT INTO users (username, password, email, created_at, is_banned, is_deleted) VALUES (:u.username, :u.password, :u.email, :u.created_at, :u.is_banned, :u.is_deleted)`, request)
+	result, err := s.db.NamedExec(inserUser, request)
 	if err != nil {
 		return nil, err
 	}

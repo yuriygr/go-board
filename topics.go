@@ -246,7 +246,16 @@ func (t *Topic) Render(w http.ResponseWriter, r *http.Request) error {
 
 // Bind - Bind HTTP request data and validate it
 func (t *Topic) Bind(r *http.Request) error {
-	// Bind
+	if r.FormValue("subject") == "" {
+		return errors.New("Subject must be filled")
+	}
+	if r.FormValue("message") == "" {
+		return errors.New("Message must be filled")
+	}
+	if len(r.FormValue("message")) < 15 {
+		return errors.New("Message is too short")
+	}
+
 	t.Type = "normal"
 	t.BoardID = 7
 	t.Subject = r.FormValue("subject")
@@ -259,17 +268,6 @@ func (t *Topic) Bind(r *http.Request) error {
 	t.States.IsDeleted = 0
 	t.Options.AllowAttach = 1
 	t.Options.CommentsClosed = 0
-
-	// Validate
-	if t.Subject == "" {
-		return errors.New("Subject must be filled")
-	}
-	if t.Message == "" {
-		return errors.New("Message must be filled")
-	}
-	if len(t.Message) < 15 {
-		return errors.New("Message is too short")
-	}
 
 	return nil
 }
@@ -307,12 +305,6 @@ func (c *Comment) Render(w http.ResponseWriter, r *http.Request) error {
 
 // Bind - Bind HTTP request data and validate it
 func (c *Comment) Bind(r *http.Request) error {
-	c.Message = r.FormValue("message")
-	c.CreatedAt = time.Now().Unix()
-	c.UserIP = r.RemoteAddr
-	c.States.IsPinned = 0
-	c.States.IsDeleted = 0
-
 	if topicID := chi.URLParam(r, "topicID"); topicID != "" {
 		topicID, _ := strconv.Atoi(topicID)
 		c.TopicID = topicID
@@ -320,12 +312,19 @@ func (c *Comment) Bind(r *http.Request) error {
 		return errors.New("You must specify the number of the topic")
 	}
 
-	if c.Message == "" {
+	if r.FormValue("message") == "" {
 		return errors.New("Message must be filled")
 	}
-	if len(c.Message) < 15 {
+	if len(r.FormValue("message")) < 15 {
 		return errors.New("Message is too short")
 	}
+
+	c.Message = r.FormValue("message")
+	c.CreatedAt = time.Now().Unix()
+	c.UserIP = r.RemoteAddr
+	c.States.IsPinned = 0
+	c.States.IsDeleted = 0
+
 	return nil
 }
 

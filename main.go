@@ -39,6 +39,7 @@ func main() {
 	})
 
 	r.Route("/v1", func(r chi.Router) {
+		r.Use(AuthCtx)
 		r.Use(APIVersionCtx("v1"))
 		r.Mount("/boards", boardsResource{storage, session}.Routes())
 		r.Mount("/topics", topicsResource{storage, session}.Routes())
@@ -49,6 +50,17 @@ func main() {
 	})
 
 	http.ListenAndServe(":3000", r)
+}
+
+// AuthCtxKey - Key for context
+type AuthCtxKey struct{}
+
+// AuthCtx - Контекст с авторизацией
+func AuthCtx(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), AuthCtxKey{}, "comments")
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 // APIVersionCtxKey - Key for context
