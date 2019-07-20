@@ -16,7 +16,7 @@ const (
 	selectPages    = "select p.* from pages as p"
 	selectTopics   = "select t.*, b.title, b.slug, COUNT(c.id) as comments_count from topics as t left join boards as b on t.board_id = b.id left join comments as c on c.topic_id = t.id"
 	selectComments = "select c.* from comments as c"
-	selectUsers    = "select u.* from users as u"
+	selectUsers    = "select u.*, up.screen_name, up.sex from users as u left join users_profile as up on up.user_id = u.id"
 
 	selectPageBySlug        = selectPages + " where p.slug = '%s'"
 	selectTopicsByID        = selectTopics + " where t.id = '%d' group by t.id"
@@ -27,7 +27,7 @@ const (
 	selectUserByUsername    = selectUsers + " where u.username = '%s'"
 
 	insertComment = "INSERT INTO comments (topic_id, message, created_at, user_ip, is_pinned, is_deleted) VALUES (:c.topic_id, :c.message, :c.created_at, :c.user_ip, :c.is_pinned, :c.is_deleted)"
-	inserTopic    = "INSERT INTO topics (type, board_id, subject, message, created_at, bumped_at, user_ip, is_closed, is_pinned, is_deleted, allow_attach, comments_closed) VALUES (:t.type, :t.board_id, :t.subject, :t.message, :t.created_at, :t.bumped_at, :t.user_ip, :t.is_closed, :t.is_pinned, :t.is_deleted, :t.allow_attach, :t.comments_closed)"
+	inserTopic    = "INSERT INTO topics (type, board_id, user_id, subject, message, created_at, bumped_at, user_ip, is_closed, is_pinned, is_deleted, allow_attach, comments_closed) VALUES (:t.type, :t.board_id, :t.user_id, :t.subject, :t.message, :t.created_at, :t.bumped_at, :t.user_ip, :t.is_closed, :t.is_pinned, :t.is_deleted, :t.allow_attach, :t.comments_closed)"
 	inserUser     = "INSERT INTO users (username, password, created_at, is_banned, is_deleted) VALUES (:u.username, :u.password, :u.created_at, :u.is_banned, :u.is_deleted)"
 )
 

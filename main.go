@@ -20,7 +20,7 @@ func main() {
 	cors := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Set-Cookie"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
@@ -38,8 +38,16 @@ func main() {
 		return
 	})
 
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		render.Render(w, r, ErrMethodNotAllowed())
+	})
+
+	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		render.Render(w, r, ErrMethodNotAllowed())
+	})
+
 	r.Route("/v1", func(r chi.Router) {
-		r.Use(AuthCtx)
+		r.Use(AuthCtx(session))
 		r.Use(APIVersionCtx("v1"))
 		r.Mount("/boards", boardsResource{storage, session}.Routes())
 		r.Mount("/topics", topicsResource{storage, session}.Routes())
@@ -56,11 +64,25 @@ func main() {
 type AuthCtxKey struct{}
 
 // AuthCtx - Контекст с авторизацией
-func AuthCtx(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), AuthCtxKey{}, "comments")
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+// Очень помогает жить и вообще
+func AuthCtx(session *Session) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sessionNew, _ := session.Auth(r)
+
+			if _, ok := sessionNew.Values["auth"].(bool); ok {
+				sessionResponse := &SessionResponse{}
+				sessionResponse.Bind(sessionNew)
+
+				ctx := context.WithValue(r.Context(), AuthCtxKey{}, sessionResponse)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), AuthCtxKey{}, nil)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
 
 // APIVersionCtxKey - Key for context
@@ -70,8 +92,8 @@ type APIVersionCtxKey struct{}
 func APIVersionCtx(version string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r = r.WithContext(context.WithValue(r.Context(), APIVersionCtxKey{}, version))
-			next.ServeHTTP(w, r)
+			ctx := context.WithValue(r.Context(), APIVersionCtxKey{}, version)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

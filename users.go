@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gorilla/sessions"
 	"github.com/yuriygr/go-board/utils"
 
 	"github.com/go-chi/chi"
@@ -31,7 +32,7 @@ func (rs usersResource) Routes() chi.Router {
 
 // UserLogin - Login user
 func (rs *usersResource) UserLogin(w http.ResponseWriter, r *http.Request) {
-	if !rs.IsLoggined(r) {
+	if _, ok := r.Context().Value(AuthCtxKey{}).(*SessionResponse); ok {
 		err := errors.New("You are already logged in, where will you go again?")
 		render.Render(w, r, ErrBadRequest(err))
 		return
@@ -40,7 +41,7 @@ func (rs *usersResource) UserLogin(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	user, err := rs.storage.GetUserByUsername(username)
 	if err != nil {
-		err := errors.New("This account does not exist")
+		//err := errors.New("This account does not exist")
 		render.Render(w, r, ErrBadRequest(err))
 		return
 	}
@@ -69,23 +70,23 @@ func (rs *usersResource) UserLogin(w http.ResponseWriter, r *http.Request) {
 	sessionNew, _ := rs.session.Auth(r)
 	sessionNew.Values["user_id"] = user.ID
 	sessionNew.Values["username"] = user.Username
+	sessionNew.Values["screenname"] = user.Profile.ScreenName
 	sessionNew.Values["auth"] = true
 	sessionNew.Save(r, w)
+
+	sessionResponse := &SessionResponse{}
+	sessionResponse.Bind(sessionNew)
 
 	render.Render(w, r, &SuccessResponse{
 		HTTPStatusCode: 200,
 		StatusText:     "Ok!",
-		Payload: &SessionResponse{
-			UserID:   sessionNew.Values["user_id"].(int32),
-			Username: sessionNew.Values["username"].(string),
-			Auth:     sessionNew.Values["auth"].(bool),
-		},
+		Payload:        sessionResponse,
 	})
 }
 
 // UserCreate - Создание пользователя
 func (rs *usersResource) UserCreate(w http.ResponseWriter, r *http.Request) {
-	if !rs.IsLoggined(r) {
+	if _, ok := r.Context().Value(AuthCtxKey{}).(*SessionResponse); ok {
 		err := errors.New("You are already logged in, where will you go again?")
 		render.Render(w, r, ErrBadRequest(err))
 		return
@@ -109,24 +110,18 @@ func (rs *usersResource) UserCreate(w http.ResponseWriter, r *http.Request) {
 	sessionNew, _ := rs.session.Auth(r)
 	sessionNew.Values["user_id"] = user.ID
 	sessionNew.Values["username"] = user.Username
+	sessionNew.Values["screenname"] = user.Profile.ScreenName
 	sessionNew.Values["auth"] = true
 	sessionNew.Save(r, w)
+
+	sessionResponse := &SessionResponse{}
+	sessionResponse.Bind(sessionNew)
 
 	render.Render(w, r, &SuccessResponse{
 		HTTPStatusCode: 201,
 		StatusText:     "User created, let's go!",
-		Payload: &SessionResponse{
-			UserID:   sessionNew.Values["user_id"].(int32),
-			Username: sessionNew.Values["username"].(string),
-			Auth:     sessionNew.Values["auth"].(bool),
-		},
+		Payload:        sessionResponse,
 	})
-}
-
-// IsLoggined - Проверям, залогинен или нет
-func (rs *usersResource) IsLoggined(r *http.Request) bool {
-	sessionNew, _ := rs.session.Auth(r)
-	return sessionNew.Values["auth"] == nil
 }
 
 //--
@@ -139,7 +134,11 @@ type User struct {
 	Username  string `json:"username" db:"u.username"`
 	Password  string `json:"-" db:"u.password"`
 	CreatedAt int64  `json:"-" db:"u.created_at"`
-	States    struct {
+	Profile   struct {
+		ScreenName string `json:"screen_name" db:"up.screen_name"`
+		Sex        string `json:"sex" db:"up.sex"`
+	} `json:"profile" db:""`
+	States struct {
 		IsBanned  bool `json:"is_banned" db:"u.is_banned"`
 		IsDeleted bool `json:"is_deleted" db:"u.is_deleted"`
 	} `json:"states" db:""`
@@ -175,7 +174,16 @@ func (u *User) Bind(r *http.Request) error {
 
 // SessionResponse - Состояние юзера
 type SessionResponse struct {
-	UserID   int32  `json:"id"`
-	Username string `json:"username"`
-	Auth     bool   `json:"auth"`
+	UserID     int32  `json:"id"`
+	Username   string `json:"username"`
+	ScreenName string `json:"screenname"`
+	Auth       bool   `json:"auth"`
+}
+
+// Bind - Bind structure with session
+func (sr *SessionResponse) Bind(session *sessions.Session) {
+	sr.UserID = session.Values["user_id"].(int32)
+	sr.Username = session.Values["username"].(string)
+	sr.ScreenName = session.Values["screenname"].(string)
+	sr.Auth = session.Values["auth"].(bool)
 }

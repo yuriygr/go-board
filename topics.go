@@ -142,6 +142,12 @@ func (rs *topicsResource) TopicCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	request.BoardID = 7
+
+	if auth, ok := r.Context().Value(AuthCtxKey{}).(*SessionResponse); ok {
+		request.UserID = auth.UserID
+	}
+
 	topic, err := rs.storage.CreateTopic(request)
 	if err != nil {
 		render.Render(w, r, ErrBadRequest(err))
@@ -212,7 +218,8 @@ func (rs *topicsResource) ReportCreate(w http.ResponseWriter, r *http.Request) {
 type Topic struct {
 	ID            int    `json:"id" db:"t.id"`
 	Type          string `json:"type" db:"t.type"`
-	BoardID       int    `json:"-" db:"t.board_id"`
+	BoardID       int32  `json:"-" db:"t.board_id"`
+	UserID        int32  `json:"-" db:"t.user_id"`
 	Name          string `json:"name" db:"-"`
 	Subject       string `json:"subject" db:"t.subject"`
 	Message       string `json:"message" db:"t.message"`
@@ -257,7 +264,6 @@ func (t *Topic) Bind(r *http.Request) error {
 	}
 
 	t.Type = "normal"
-	t.BoardID = 7
 	t.Subject = r.FormValue("subject")
 	t.Message = r.FormValue("message")
 	t.CreatedAt = time.Now().Unix()

@@ -11,7 +11,9 @@ import (
 )
 
 var (
-	key  = os.Getenv("SESSION_KEY")
+	shost = os.Getenv("SESSION_HOST")
+	skey  = os.Getenv("SESSION_KEY")
+
 	size = os.Getenv("REDIS_SIZE")
 	host = os.Getenv("REDIS_HOST")
 	port = os.Getenv("REDIS_PORT")
@@ -21,12 +23,13 @@ var (
 // NewSession - init new cookie storage
 func NewSession() *Session {
 	path := fmt.Sprintf("%s:%s", host, port)
-	session, err := redistore.NewRediStore(256, "tcp", path, pass, []byte(key))
+	session, err := redistore.NewRediStore(256, "tcp", path, pass, []byte(skey))
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	session.Options = &sessions.Options{
+		Domain:   shost,
 		Path:     "/",
 		MaxAge:   86400 * 256, // 256 Days
 		HttpOnly: true,

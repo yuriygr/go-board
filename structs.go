@@ -55,6 +55,14 @@ func ErrNotFound(err error) render.Renderer {
 	}
 }
 
+// ErrMethodNotAllowed - Возвращает ошибку 404 со статусом
+func ErrMethodNotAllowed() render.Renderer {
+	return &ErrResponse{
+		HTTPStatusCode: 405,
+		StatusText:     "Method Not Allowed",
+	}
+}
+
 //--
 // Success response payloads & renderers
 //--

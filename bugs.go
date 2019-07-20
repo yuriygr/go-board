@@ -29,10 +29,7 @@ func (rs bugsResource) Routes() chi.Router {
 
 // BugsList - Return list of Bugs
 func (rs *bugsResource) BugsList(w http.ResponseWriter, r *http.Request) {
-	render.Render(w, r, &ErrResponse{
-		HTTPStatusCode: 405,
-		StatusText:     "Method not allowed",
-	})
+	render.Render(w, r, ErrMethodNotAllowed())
 }
 
 // BugsCreate - Handler
