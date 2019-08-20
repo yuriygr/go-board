@@ -17,7 +17,6 @@ func (rs boardsResource) Routes() chi.Router {
 	r := chi.NewRouter()
 
 	r.With(rs.BoardsCtx).Get("/", rs.BoardsList)
-	r.Post("/", rs.BoardCreate)
 
 	return r
 }
@@ -57,26 +56,18 @@ func (rs *boardsResource) BoardsList(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// BoardCreate - Возвращает структуру ресурса
-func (rs *boardsResource) BoardCreate(w http.ResponseWriter, r *http.Request) {
-	render.Render(w, r, &ErrResponse{
-		HTTPStatusCode: 405,
-		StatusText:     "Method not allowed",
-	})
-}
-
 //--
 // Struct
 //--
 
 // Board structure
 type Board struct {
-	ID        int    `json:"-" db:"b.id"`
+	ID        int64  `json:"-" db:"b.id"`
 	Title     string `json:"title" db:"b.title"`
 	Slug      string `json:"slug" db:"b.slug"`
 	Type      string `json:"type" db:"b.type"`
-	Available int8   `json:"-" db:"b.available"`
-	NSFW      int8   `json:"nsfw" db:"b.nsfw"`
+	Available bool   `json:"-" db:"b.available"`
+	NSFW      bool   `json:"nsfw" db:"b.nsfw"`
 }
 
 // Render - Render, wtf

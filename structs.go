@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/render"
+	"github.com/gorilla/sessions"
 )
 
 //--
@@ -55,6 +56,15 @@ func ErrNotFound(err error) render.Renderer {
 	}
 }
 
+// ErrForbidden - Возвращает ошибку 403 со статусом
+func ErrForbidden(err error) render.Renderer {
+	return &ErrResponse{
+		Err:            err,
+		HTTPStatusCode: 403,
+		StatusText:     err.Error(),
+	}
+}
+
 // ErrMethodNotAllowed - Возвращает ошибку 404 со статусом
 func ErrMethodNotAllowed() render.Renderer {
 	return &ErrResponse{
@@ -81,4 +91,28 @@ func (s *SuccessResponse) Render(w http.ResponseWriter, r *http.Request) error {
 	s.AppCode = s.HTTPStatusCode
 	render.Status(r, s.HTTPStatusCode)
 	return nil
+}
+
+//--
+// Session sctructure
+//--
+
+// SessionResponse - Состояние юзера
+type SessionResponse struct {
+	User struct {
+		ID         int64  `json:"id"`
+		Username   string `json:"username"`
+		ScreenName string `json:"screen_name"`
+	} `json:"user"`
+	Auth        bool   `json:"auth"`
+	Permissions string `json:"permissions"`
+}
+
+// Bind - Bind structure with session
+func (sr *SessionResponse) Bind(session *sessions.Session) {
+	sr.User.ID = session.Values["user_id"].(int64)
+	sr.User.Username = session.Values["username"].(string)
+	sr.User.ScreenName = session.Values["screenname"].(string)
+	sr.Auth = session.Values["auth"].(bool)
+	sr.Permissions = ""
 }

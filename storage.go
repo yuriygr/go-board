@@ -4,31 +4,37 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"strconv"
 	"time"
 
+	"github.com/go-chi/chi"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 )
 
 const (
-	selectBoards   = "select b.* from boards as b"
-	selectPages    = "select p.* from pages as p"
-	selectTopics   = "select t.*, b.title, b.slug, COUNT(c.id) as comments_count from topics as t left join boards as b on t.board_id = b.id left join comments as c on c.topic_id = t.id"
-	selectComments = "select c.* from comments as c"
-	selectUsers    = "select u.*, up.screen_name, up.sex from users as u left join users_profile as up on up.user_id = u.id"
+	selectBoards         = "select b.* from boards as b"
+	selectPages          = "select p.* from pages as p"
+	selectTopics         = "select t.*, b.title, b.slug, COUNT(c.id) as comments_count, up.screen_name from topics as t left join boards as b on t.board_id = b.id left join comments as c on c.topic_id = t.id left join users_profile as up on up.user_id = t.user_id"
+	selectComments       = "select c.*, up.screen_name from comments as c left join users_profile as up on up.user_id = c.user_id"
+	selectUsers          = "select u.*, up.screen_name, up.sex from users as u left join users_profile as up on up.user_id = u.id"
+	selectUsersStatistic = "select us.*, u.created_at from users_stats as us left join users as u on us.user_id = u.id"
 
-	selectPageBySlug        = selectPages + " where p.slug = '%s'"
-	selectTopicsByID        = selectTopics + " where t.id = '%d' group by t.id"
-	selectTopicsPaginated   = selectTopics + " group by t.id order by t.is_pinned desc, %s desc limit %d"
-	selectCommentByID       = selectComments + " where c.id = '%d'"
-	selectCommentsByTopicID = selectComments + " where c.topic_id = '%d' order by c.is_pinned desc, c.created_at asc"
-	selectUserByID          = selectUsers + " where u.id = '%d'"
-	selectUserByUsername    = selectUsers + " where u.username = '%s'"
+	selectBoardBySlug                 = selectBoards + " where b.slug = '%s'"
+	selectPageBySlug                  = selectPages + " where p.slug = '%s'"
+	selectCommentByID                 = selectComments + " where c.id = '%d'"
+	selectCommentsByTopicID           = selectComments + " where c.topic_id = '%d' order by c.is_pinned desc, c.created_at asc"
+	selectCommentsByTopicIDWithOffset = selectComments + " where c.topic_id = '%d' and c.created_at > '%d' order by c.is_pinned desc, c.created_at asc"
 
-	insertComment = "INSERT INTO comments (topic_id, message, created_at, user_ip, is_pinned, is_deleted) VALUES (:c.topic_id, :c.message, :c.created_at, :c.user_ip, :c.is_pinned, :c.is_deleted)"
-	inserTopic    = "INSERT INTO topics (type, board_id, user_id, subject, message, created_at, bumped_at, user_ip, is_closed, is_pinned, is_deleted, allow_attach, comments_closed) VALUES (:t.type, :t.board_id, :t.user_id, :t.subject, :t.message, :t.created_at, :t.bumped_at, :t.user_ip, :t.is_closed, :t.is_pinned, :t.is_deleted, :t.allow_attach, :t.comments_closed)"
-	inserUser     = "INSERT INTO users (username, password, created_at, is_banned, is_deleted) VALUES (:u.username, :u.password, :u.created_at, :u.is_banned, :u.is_deleted)"
+	insertComment    = "INSERT INTO comments (topic_id, user_id, message, created_at, user_ip, user_agent, is_pinned, is_deleted) VALUES (:c.topic_id, :c.user_id, :c.message, :c.created_at, :c.user_ip, :c.user_agent, :c.is_pinned, :c.is_deleted)"
+	inserTopic       = "INSERT INTO topics (type, board_id, user_id, subject, message, created_at, bumped_at, user_ip, user_agent, is_closed, is_pinned, is_deleted, allow_attach, only_anonymously) VALUES (:t.type, :t.board_id, :t.user_id, :t.subject, :t.message, :t.created_at, :t.bumped_at, :t.user_ip, :t.user_agent, :t.is_closed, :t.is_pinned, :t.is_deleted, :t.allow_attach, :t.only_anonymously)"
+	inserUser        = "INSERT INTO users (username, password, created_at, is_banned, is_deleted) VALUES (:u.username, :u.password, :u.created_at, :u.is_banned, :u.is_deleted)"
+	inserUserProfile = "INSERT INTO users_profile (user_id, screen_name) VALUES (:u.id, :up.screen_name)"
+	inserUserStats   = "INSERT INTO users_stats (user_id) values (:u.id)"
+
+	updateTopicBumpTime = "UPDATE topics as t SET t.bumped_at = '%d' WHERE t.id = '%d'"
 )
 
 // NewStorage - init new storage
@@ -38,7 +44,13 @@ func NewStorage() *Storage {
 		log.Fatalln(err)
 	}
 	db.SetConnMaxLifetime(time.Hour)
-	return &Storage{db}
+	// Unsafe becouse i sleep
+	return &Storage{db.Unsafe()}
+}
+
+// BeginTx - Start transaction
+func (s *Storage) BeginTx() {
+	// s.db.BeginTransaction()
 }
 
 // Storage - Нечто такое обстрактное я хз
@@ -55,13 +67,27 @@ type Storage struct {
 // GetBoardsList - Get list of boards
 func (s *Storage) GetBoardsList() ([]*Board, error) {
 	boards := []*Board{}
+	sql := selectBoards
 
-	err := s.db.Select(&boards, selectBoards)
+	err := s.db.Select(&boards, sql)
 	if err != nil {
 		return nil, err
 	}
 
 	return boards, nil
+}
+
+// GetBoardBySlug - Get boarf by slug
+func (s *Storage) GetBoardBySlug(slug string) (*Board, error) {
+	board := Board{}
+	sql := fmt.Sprintf(selectBoardBySlug, slug)
+
+	err := s.db.Get(&board, sql)
+	if err != nil {
+		return nil, err
+	}
+
+	return &board, nil
 }
 
 //--
@@ -87,15 +113,44 @@ func (s *Storage) GetPageBySlug(slug string) (*Page, error) {
 
 // TopicsRequest - Request for fetch topics
 type TopicsRequest struct {
+	Slug  string
 	Sort  string
-	Page  int16
-	Limit int8
+	Page  int
+	Limit int
+}
+
+// Bind - Bind HTTP request data and validate it
+func (tr *TopicsRequest) Bind(r *http.Request) error {
+
+	if slug := r.URL.Query().Get("slug"); slug != "" {
+		tr.Slug = slug
+	}
+
+	if page := r.URL.Query().Get("page"); page != "" {
+		if pageInt, err := strconv.Atoi(page); err == nil {
+			tr.Page = pageInt
+		}
+	}
+
+	if limit := r.URL.Query().Get("limit"); limit != "" {
+		if limitInt, err := strconv.Atoi(limit); err == nil {
+			tr.Limit = limitInt
+		}
+	}
+
+	return nil
 }
 
 // GetTopicsList - Return topics list with params
 func (s *Storage) GetTopicsList(request *TopicsRequest) ([]*Topic, error) {
 	topics := []*Topic{}
-	sql := fmt.Sprintf(selectTopicsPaginated, request.Sort, request.Limit)
+	sql := selectTopics
+
+	if len(request.Slug) > 0 {
+		sql = sql + " " + fmt.Sprintf("where b.slug = '%s'", request.Slug)
+	}
+
+	sql = sql + " " + fmt.Sprintf("group by t.id order by t.is_pinned desc, %s desc limit %d", request.Sort, request.Limit)
 
 	err := s.db.Select(&topics, sql)
 	if err != nil {
@@ -108,7 +163,13 @@ func (s *Storage) GetTopicsList(request *TopicsRequest) ([]*Topic, error) {
 // GetTopicByID - Return topic by ID
 func (s *Storage) GetTopicByID(id int64) (*Topic, error) {
 	topic := Topic{}
-	sql := fmt.Sprintf(selectTopicsByID, id)
+	sql := selectTopics
+
+	if id != 0 {
+		sql = sql + " " + fmt.Sprintf("where t.id = '%d'", id)
+	}
+
+	sql = sql + " group by t.id"
 
 	err := s.db.Get(&topic, sql)
 	if err != nil {
@@ -138,14 +199,48 @@ func (s *Storage) CreateTopic(request *Topic) (*Topic, error) {
 	return topic, nil
 }
 
+// UpdateTopicBumpTime - Update topic bump time with comment data
+func (s *Storage) UpdateTopicBumpTime(request *Comment) error {
+	sql := fmt.Sprintf(updateTopicBumpTime, request.CreatedAt, request.TopicID)
+
+	_, err := s.db.Exec(sql)
+
+	return err
+}
+
 // --
 // Comments methods
 // --
 
+// CommentsRequest - Request for fetch comments
+type CommentsRequest struct {
+	TopicID int
+	Offset  int // Смещение по времени комментария
+}
+
+// Bind - Bind HTTP request data and validate it
+func (cr *CommentsRequest) Bind(r *http.Request) error {
+
+	if topicID := chi.URLParam(r, "topicID"); topicID != "" {
+		topicID, _ := strconv.Atoi(topicID)
+		cr.TopicID = topicID
+	} else {
+		return errors.New("ID needed")
+	}
+
+	if offset := r.URL.Query().Get("offset"); offset != "" {
+		if offsetInt, err := strconv.Atoi(offset); err == nil {
+			cr.Offset = offsetInt
+		}
+	}
+
+	return nil
+}
+
 // GetCommentsList - Return list of comments by topic ID
-func (s *Storage) GetCommentsList(id int) ([]*Comment, error) {
+func (s *Storage) GetCommentsList(request *CommentsRequest) ([]*Comment, error) {
 	comments := []*Comment{}
-	sql := fmt.Sprintf(selectCommentsByTopicID, id)
+	sql := fmt.Sprintf(selectCommentsByTopicIDWithOffset, request.TopicID, request.Offset)
 
 	err := s.db.Select(&comments, sql)
 	if err != nil {
@@ -210,7 +305,7 @@ func (s *Storage) CreateBugReport(request *BugCreateRequest) (*Bug, error) {
 // GetUserByUsername - Return user by username
 func (s *Storage) GetUserByUsername(username string) (*User, error) {
 	user := User{}
-	sql := fmt.Sprintf(selectUserByUsername, username)
+	sql := selectUsers + " " + fmt.Sprintf("where u.username = '%s'", username)
 
 	err := s.db.Get(&user, sql)
 	if err != nil {
@@ -223,7 +318,7 @@ func (s *Storage) GetUserByUsername(username string) (*User, error) {
 // GetUserByID - Return user by ID
 func (s *Storage) GetUserByID(id int64) (*User, error) {
 	user := User{}
-	sql := fmt.Sprintf(selectUserByID, id)
+	sql := selectUsers + " " + fmt.Sprintf("where u.id = '%d'", id)
 
 	err := s.db.Get(&user, sql)
 	if err != nil {
@@ -234,21 +329,57 @@ func (s *Storage) GetUserByID(id int64) (*User, error) {
 }
 
 // CreateUser - Create user and return him, or error
+// TODO: транзакции
 func (s *Storage) CreateUser(request *User) (*User, error) {
 	result, err := s.db.NamedExec(inserUser, request)
 	if err != nil {
 		return nil, err
 	}
 
-	userID, err := result.LastInsertId()
+	UserID, err := result.LastInsertId()
 	if err != nil {
 		return nil, err
 	}
 
-	user, err := s.GetUserByID(userID)
+	// And we must create profile and stats to user...
+	// TODO: Transfer to user controller? Like comment bump
+
+	request.ID = UserID
+
+	if _, err := s.db.NamedExec(inserUserProfile, request); err != nil {
+		return nil, err
+	}
+
+	if _, err := s.db.NamedExec(inserUserStats, request); err != nil {
+		return nil, err
+	}
+
+	user, err := s.GetUserByID(UserID)
 	if err != nil {
 		return nil, err
 	}
 
 	return user, nil
+}
+
+// GetUserStatistic - Get user stats
+func (s *Storage) GetUserStatistic(id int64) (*UserStatistic, error) {
+	statistic := UserStatistic{}
+	sql := selectUsersStatistic + " " + fmt.Sprintf("where us.user_id = '%d'", id)
+
+	err := s.db.Get(&statistic, sql)
+	if err != nil {
+		return nil, err
+	}
+
+	return &statistic, nil
+}
+
+// UpdateUserStatistic - Update user stats fields
+func (s *Storage) UpdateUserStatistic(id int64, field string) error {
+	sql := fmt.Sprintf("UPDATE users_stats as us SET us.%s = us.%s + 1 WHERE us.user_id = '%d'", field, field, id)
+
+	_, err := s.db.Exec(sql)
+
+	return err
 }

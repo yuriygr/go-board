@@ -1,11 +1,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
-	"github.com/gorilla/sessions"
 	"github.com/yuriygr/go-board/utils"
 
 	"github.com/go-chi/chi"
@@ -20,6 +21,11 @@ type usersResource struct {
 func (rs usersResource) Routes() chi.Router {
 	r := chi.NewRouter()
 
+	r.Route("/{userID}", func(r chi.Router) {
+		r.Use(rs.UserCtx)
+		r.Get("/", rs.UserGet)
+		r.Get("/statistic", rs.StatisticGet)
+	})
 	r.Post("/login", rs.UserLogin)
 	r.Post("/create", rs.UserCreate)
 
@@ -27,8 +33,66 @@ func (rs usersResource) Routes() chi.Router {
 }
 
 //--
+// Middleware
+//--
+
+// UserCtxKey - Key for context
+type UserCtxKey struct{}
+
+// UserCtx middleware is used to load an User object from
+// the URL parameters passed through as the request. In case
+// the User could not be found, we stop here and return a 404.
+func (rs *usersResource) UserCtx(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var user *User
+		var err error
+
+		if userID := chi.URLParam(r, "userID"); userID != "" {
+			userID, _ := strconv.ParseInt(userID, 10, 64)
+			user, err = rs.storage.GetUserByID(userID)
+		} else {
+			render.Render(w, r, ErrBadRequest(errors.New("User ID needed")))
+			return
+		}
+		if err != nil {
+			render.Render(w, r, ErrNotFound(err))
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), UserCtxKey{}, user)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+//--
 // Handler methods
 //--
+
+// UserGet - Get user
+func (rs *usersResource) UserGet(w http.ResponseWriter, r *http.Request) {
+	user := r.Context().Value(UserCtxKey{}).(*User)
+
+	if err := render.Render(w, r, user); err != nil {
+		render.Render(w, r, ErrRender(err))
+		return
+	}
+}
+
+// StatisticGet * Get user statistic
+func (rs *usersResource) StatisticGet(w http.ResponseWriter, r *http.Request) {
+	user := r.Context().Value(UserCtxKey{}).(*User)
+
+	statistic, err := rs.storage.GetUserStatistic(user.ID)
+	if err != nil {
+		render.Render(w, r, ErrRender(err))
+		return
+	}
+
+	if err := render.Render(w, r, statistic); err != nil {
+		render.Render(w, r, ErrRender(err))
+		return
+	}
+}
 
 // UserLogin - Login user
 func (rs *usersResource) UserLogin(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +105,7 @@ func (rs *usersResource) UserLogin(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	user, err := rs.storage.GetUserByUsername(username)
 	if err != nil {
-		//err := errors.New("This account does not exist")
+		err := errors.New("Invalid username or password")
 		render.Render(w, r, ErrBadRequest(err))
 		return
 	}
@@ -79,7 +143,7 @@ func (rs *usersResource) UserLogin(w http.ResponseWriter, r *http.Request) {
 
 	render.Render(w, r, &SuccessResponse{
 		HTTPStatusCode: 200,
-		StatusText:     "Ok!",
+		StatusText:     "You are successfully logged in.",
 		Payload:        sessionResponse,
 	})
 }
@@ -119,7 +183,7 @@ func (rs *usersResource) UserCreate(w http.ResponseWriter, r *http.Request) {
 
 	render.Render(w, r, &SuccessResponse{
 		HTTPStatusCode: 201,
-		StatusText:     "User created, let's go!",
+		StatusText:     "Account successfully created, let's go!",
 		Payload:        sessionResponse,
 	})
 }
@@ -130,7 +194,7 @@ func (rs *usersResource) UserCreate(w http.ResponseWriter, r *http.Request) {
 
 // User sructure
 type User struct {
-	ID        int32  `json:"-" db:"u.id"`
+	ID        int64  `json:"-" db:"u.id"`
 	Username  string `json:"username" db:"u.username"`
 	Password  string `json:"-" db:"u.password"`
 	CreatedAt int64  `json:"-" db:"u.created_at"`
@@ -158,6 +222,9 @@ func (u *User) Bind(r *http.Request) error {
 	if r.FormValue("password") == "" {
 		return errors.New("Password must be filled")
 	}
+	if r.FormValue("password") != r.FormValue("password_confirm") {
+		return errors.New("Password confirmation does not match the password")
+	}
 
 	password, err := utils.HashPassword(r.FormValue("password"))
 	if err != nil {
@@ -167,23 +234,25 @@ func (u *User) Bind(r *http.Request) error {
 	u.Password = password
 	u.Username = r.FormValue("username")
 	u.CreatedAt = time.Now().Unix()
+	u.Profile.ScreenName = r.FormValue("username")
 	u.States.IsBanned = false
 	u.States.IsDeleted = false
 	return nil
 }
 
-// SessionResponse - Состояние юзера
-type SessionResponse struct {
-	UserID     int32  `json:"id"`
-	Username   string `json:"username"`
-	ScreenName string `json:"screenname"`
-	Auth       bool   `json:"auth"`
+// UserStatistic - User stats
+type UserStatistic struct {
+	ID        int64 `json:"-" db:"us.id"`
+	UserID    int64 `json:"user_id" db:"us.user_id"`
+	Statistic struct {
+		AccountCreated  int64 `json:"account_created" db:"u.created_at"`
+		СreatedTopics   int64 `json:"created_topics" db:"us.created_topics"`
+		СreatedComments int64 `json:"created_comments" db:"us.created_comments"`
+		UploadedFiles   int64 `json:"uploaded_files" db:"us.uploaded_files"`
+	} `json:"statistic" db:""`
 }
 
-// Bind - Bind structure with session
-func (sr *SessionResponse) Bind(session *sessions.Session) {
-	sr.UserID = session.Values["user_id"].(int32)
-	sr.Username = session.Values["username"].(string)
-	sr.ScreenName = session.Values["screenname"].(string)
-	sr.Auth = session.Values["auth"].(bool)
+// Render - Render, wtf
+func (us *UserStatistic) Render(w http.ResponseWriter, r *http.Request) error {
+	return nil
 }

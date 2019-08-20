@@ -47,7 +47,3 @@ type Session struct {
 func (s *Session) Auth(r *http.Request) (*sessions.Session, error) {
 	return s.rs.Get(r, "auth_session")
 }
-
-func (s *Session) Set(key string, value interface{}) error {
-	return nil
-}

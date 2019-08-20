@@ -85,16 +85,20 @@ func (rs *pagesResource) PageGet(w http.ResponseWriter, r *http.Request) {
 
 // Page struct
 type Page struct {
-	ID              int    `json:"-" db:"p.id"`
-	Slug            string `json:"slug" db:"p.slug"`
-	Title           string `json:"title" db:"p.title"`
-	Content         string `json:"content" db:"p.content"`
-	CreatedAt       int    `json:"created_at,omitempty" db:"p.created_at"`
-	ModifiedIn      int    `json:"modified_in,omitempty" db:"p.modified_in"`
-	IsComments      int    `json:"is_comments,omitempty" db:"p.is_comments"`
-	IsHidden        int    `json:"-" db:"p.is_hidden"`
-	MetaDescription string `json:"-" db:"p.meta_description"`
-	MetaKeywords    string `json:"-" db:"p.meta_keywords"`
+	ID         int32  `json:"-" db:"p.id"`
+	Slug       string `json:"slug" db:"p.slug"`
+	Title      string `json:"title" db:"p.title"`
+	Content    string `json:"content" db:"p.content"`
+	CreatedAt  int64  `json:"created_at,omitempty" db:"p.created_at"`
+	ModifiedIn int64  `json:"modified_in,omitempty" db:"p.modified_in"`
+	States     struct {
+		IsComments bool `json:"is_comments,omitempty" db:"p.is_comments"`
+		IsHidden   bool `json:"-" db:"p.is_hidden"`
+	} `json:"states" db:""`
+	Meta struct {
+		Description string `json:"meta_description" db:"p.meta_description"`
+		Keywords    string `json:"meta_keywords" db:"p.meta_keywords"`
+	} `json:"meta" db:""`
 }
 
 // Render - render, wtf

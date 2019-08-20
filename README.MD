@@ -25,3 +25,18 @@ Some systemctl commands:
 Решение: В адаптере включить вывод полей с префиксом
 https://github.com/go-sql-driver/mysql#columnswithalias
 Затем, переименновать поля в структурах из `db:"type"` в `db:"b.type"`
+
+
+IP: CHAR(15)
+personal message: TEXT
+date and time: DATETIME
+title: VARCHAR(255)
+name (or surname): VARCHAR(255)
+user-agent: VARCHAR(255)
+forum answer (or comment): TEXT
+email address: VARCHAR(255)
+country: CHAR(2)
+password: VARCHAR(255)
+custom session cookie: VARCHAR(255)
+
+certbot renew --cert-name allo.li --nginx
