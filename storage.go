@@ -150,7 +150,10 @@ func (s *Storage) GetTopicsList(request *TopicsRequest) ([]*Topic, error) {
 		sql = sql + " " + fmt.Sprintf("where b.slug = '%s'", request.Slug)
 	}
 
-	sql = sql + " " + fmt.Sprintf("group by t.id order by t.is_pinned desc, %s desc limit %d", request.Sort, request.Limit)
+	limit := request.Limit
+	offset := request.Limit * (request.Page - 1)
+
+	sql = sql + " " + fmt.Sprintf("group by t.id order by t.is_pinned desc, %s desc limit %d offset %d", request.Sort, limit, offset)
 
 	err := s.db.Select(&topics, sql)
 	if err != nil {
