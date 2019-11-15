@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -160,13 +162,6 @@ func (rs *topicsResource) TopicCreate(w http.ResponseWriter, r *http.Request) {
 	// Set board
 	request.BoardID = board.ID
 
-	// Now, we associate the user with the topic
-	if auth, ok := r.Context().Value(AuthCtxKey{}).(*SessionResponse); ok {
-		request.UserID = auth.User.ID
-	} else {
-		request.UserID = 1 // Default Anon profile
-	}
-
 	topic, err := rs.storage.CreateTopic(request)
 	if err != nil {
 		render.Render(w, r, ErrBadRequest(err))
@@ -176,11 +171,8 @@ func (rs *topicsResource) TopicCreate(w http.ResponseWriter, r *http.Request) {
 	// Tracking user stats
 	go rs.storage.UpdateUserStatistic(topic.UserID, "created_topics")
 
-	render.Render(w, r, &SuccessResponse{
-		HTTPStatusCode: 201,
-		StatusText:     "Topic created!",
-		Payload:        topic,
-	})
+	render.Status(r, http.StatusCreated)
+	render.Render(w, r, topic)
 }
 
 // TopicCommentsGet - List of comments on topic
@@ -210,25 +202,9 @@ func (rs *topicsResource) CommentCreate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// And if exist, closed it, or not
-	if topic.States.IsClosed {
-		err := errors.New("Topic closed")
+	if err := rs.CheckTopic(topic); err != nil {
 		render.Render(w, r, ErrForbidden(err))
 		return
-	}
-
-	// And deleted it
-	if topic.States.IsDeleted {
-		err := errors.New("Topic not exist")
-		render.Render(w, r, ErrForbidden(err))
-		return
-	}
-
-	// Now, we associate the user with the comment
-	if auth, ok := r.Context().Value(AuthCtxKey{}).(*SessionResponse); ok {
-		request.UserID = auth.User.ID
-	} else {
-		request.UserID = 1 // Default Anon profile
 	}
 
 	comment, err := rs.storage.CreateComment(request)
@@ -243,11 +219,8 @@ func (rs *topicsResource) CommentCreate(w http.ResponseWriter, r *http.Request) 
 	// Tracking user stats
 	go rs.storage.UpdateUserStatistic(comment.UserID, "created_comments")
 
-	render.Render(w, r, &SuccessResponse{
-		HTTPStatusCode: 201,
-		StatusText:     "Comment created!",
-		Payload:        comment,
-	})
+	render.Status(r, http.StatusCreated)
+	render.Render(w, r, comment)
 }
 
 // ReportCreate - Создает жалобы на топик
@@ -256,6 +229,23 @@ func (rs *topicsResource) ReportCreate(w http.ResponseWriter, r *http.Request) {
 		HTTPStatusCode: 201,
 		StatusText:     "Report created!",
 	})
+}
+
+//--
+// Helpers function
+//--
+
+// CheckTopic - Check topic for some states
+func (rs *topicsResource) CheckTopic(topic *Topic) error {
+	if topic.States.IsClosed {
+		return errors.New("Topic closed")
+	}
+
+	if topic.States.IsDeleted {
+		return errors.New("Topic not exist")
+	}
+
+	return nil
 }
 
 //--
@@ -275,7 +265,9 @@ type Topic struct {
 	UserIP        string `json:"-" db:"t.user_ip"`
 	UserAgent     string `json:"-" db:"t.user_agent"`
 	CommentsCount int    `json:"comments_count" db:"comments_count"`
+	FilesCount    int    `json:"files_count" db:"files_count"`
 	User          struct {
+		ID         int64  `json:"id" db:"up.user_id"`
 		ScreenName string `json:"screen_name" db:"up.screen_name"`
 		IsAdmin    bool   `json:"is_admin" db:"-"`
 	} `json:"user" db:""`
@@ -284,22 +276,30 @@ type Topic struct {
 		Slug  string `json:"slug" db:"b.slug"`
 	} `json:"board" db:""`
 	States struct {
-		IsClosed  bool `json:"is_closed" db:"t.is_closed"`
-		IsPinned  bool `json:"is_pinned" db:"t.is_pinned"`
-		IsDeleted bool `json:"-" db:"t.is_deleted"`
+		IsClosed    bool `json:"is_closed" db:"t.is_closed"`
+		IsPinned    bool `json:"is_pinned" db:"t.is_pinned"`
+		IsFavorited bool `json:"is_favorited" db:"-"`
+		IsDeleted   bool `json:"-" db:"t.is_deleted"`
 	} `json:"states" db:""`
 	Options struct {
 		AllowAttach     bool `json:"allow_attach" db:"t.allow_attach"`
 		OnlyAnonymously bool `json:"only_anonymously" db:"t.only_anonymously"`
 	} `json:"options" db:""`
 
-	Attachments []interface{} `json:"attachments" db:"-"`
+	Attachments []*File `json:"attachments" db:""`
 }
 
 // Render - Render, wtf
 func (t *Topic) Render(w http.ResponseWriter, r *http.Request) error {
-	t.User.IsAdmin = false
-	t.Attachments = make([]interface{}, 0)
+	t.States.IsFavorited = false
+
+	for _, file := range t.Attachments {
+		host := os.Getenv("STORAGE_HOST")
+		file.Origin = fmt.Sprintf("%s/%s.%s", host, file.UUID, file.Type)
+		file.Thumb = fmt.Sprintf("%s/%s-thumb.%s", host, file.UUID, file.Type)
+		file.Resolution = fmt.Sprintf("%dx%d", file.Width, file.Height)
+	}
+
 	return nil
 }
 
@@ -318,9 +318,15 @@ func (t *Topic) Bind(r *http.Request) error {
 		return errors.New("Message is too short")
 	}
 
-	// Awesome parser for markup
+	// Now, we associate the user with the comment
+	if auth, ok := r.Context().Value(AuthCtxKey{}).(*SessionResponse); ok {
+		t.UserID = auth.User.ID
+	} else {
+		t.UserID = 1 // Default Anon profile
+	}
 
-	message, err := utils.ParseMessage(r.FormValue("message"))
+	// Awesome parser for markup
+	message, err := utils.FormatMessage(r.FormValue("message"))
 	if err != nil {
 		return errors.New("Message so borred")
 	}
@@ -339,15 +345,6 @@ func (t *Topic) Bind(r *http.Request) error {
 	t.Options.OnlyAnonymously = false
 
 	return nil
-}
-
-// NewTopicsListResponse -
-func NewTopicsListResponse(topics []*Topic) []render.Renderer {
-	list := []render.Renderer{}
-	for _, topic := range topics {
-		list = append(list, topic)
-	}
-	return list
 }
 
 //--
@@ -371,10 +368,13 @@ type Comment struct {
 		IsPinned  int8 `json:"is_pinned" db:"c.is_pinned"`
 		IsDeleted int8 `json:"is_deleted" db:"c.is_deleted"`
 	} `json:"states" db:""`
+
+	Attachments []File `json:"attachments" db:"-"`
 }
 
 // Render - Render, wtf
 func (c *Comment) Render(w http.ResponseWriter, r *http.Request) error {
+	c.Attachments = []File{}
 	return nil
 }
 
@@ -387,13 +387,19 @@ func (c *Comment) Bind(r *http.Request) error {
 		return errors.New("You must specify the number of the topic")
 	}
 
+	// Now, we associate the user with the comment
+	if auth, ok := r.Context().Value(AuthCtxKey{}).(*SessionResponse); ok {
+		c.UserID = auth.User.ID
+	} else {
+		c.UserID = 1 // Default Anon profile
+	}
+
 	if r.FormValue("message") == "" {
 		return errors.New("Message must be filled")
 	}
 
 	// Awesome parser for markup
-
-	message, err := utils.ParseMessage(r.FormValue("message"))
+	message, err := utils.FormatMessage(r.FormValue("message"))
 	if err != nil {
 		return errors.New("Message so borred")
 	}
@@ -408,11 +414,29 @@ func (c *Comment) Bind(r *http.Request) error {
 	return nil
 }
 
+// NewTopicsListResponse -
+func NewTopicsListResponse(topics []*Topic) []render.Renderer {
+	list := []render.Renderer{}
+	for _, topic := range topics {
+		list = append(list, topic)
+	}
+	return list
+}
+
 // NewCommentListResponse -
 func NewCommentListResponse(comments []*Comment) []render.Renderer {
 	list := []render.Renderer{}
 	for _, comment := range comments {
 		list = append(list, comment)
+	}
+	return list
+}
+
+// NewFilesListResponse -
+func NewFilesListResponse(files []*File) []render.Renderer {
+	list := []render.Renderer{}
+	for _, file := range files {
+		list = append(list, file)
 	}
 	return list
 }

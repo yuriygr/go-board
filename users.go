@@ -28,6 +28,7 @@ func (rs usersResource) Routes() chi.Router {
 	})
 	r.Post("/login", rs.UserLogin)
 	r.Post("/create", rs.UserCreate)
+	r.Get("/session", rs.UserSession)
 
 	return r
 }
@@ -103,6 +104,7 @@ func (rs *usersResource) UserLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	username := r.FormValue("username")
+	username = utils.EscapeString(username)
 	user, err := rs.storage.GetUserByUsername(username)
 	if err != nil {
 		err := errors.New("Invalid username or password")
@@ -132,11 +134,12 @@ func (rs *usersResource) UserLogin(w http.ResponseWriter, r *http.Request) {
 	// Let's create session!
 
 	sessionNew, _ := rs.session.Auth(r)
-	sessionNew.Values["user_id"] = user.ID
-	sessionNew.Values["username"] = user.Username
-	sessionNew.Values["screenname"] = user.Profile.ScreenName
+	sessionNew.Values["user"] = *user
 	sessionNew.Values["auth"] = true
-	sessionNew.Save(r, w)
+	if err := sessionNew.Save(r, w); err != nil {
+		render.Render(w, r, ErrBadRequest(err))
+		return
+	}
 
 	sessionResponse := &SessionResponse{}
 	sessionResponse.Bind(sessionNew)
@@ -172,11 +175,12 @@ func (rs *usersResource) UserCreate(w http.ResponseWriter, r *http.Request) {
 	// Let's create session!
 
 	sessionNew, _ := rs.session.Auth(r)
-	sessionNew.Values["user_id"] = user.ID
-	sessionNew.Values["username"] = user.Username
-	sessionNew.Values["screenname"] = user.Profile.ScreenName
+	sessionNew.Values["user"] = *user
 	sessionNew.Values["auth"] = true
-	sessionNew.Save(r, w)
+	if err := sessionNew.Save(r, w); err != nil {
+		render.Render(w, r, ErrBadRequest(err))
+		return
+	}
 
 	sessionResponse := &SessionResponse{}
 	sessionResponse.Bind(sessionNew)
@@ -188,14 +192,33 @@ func (rs *usersResource) UserCreate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// UserSession - Check session
+func (rs *usersResource) UserSession(w http.ResponseWriter, r *http.Request) {
+	if _, ok := r.Context().Value(AuthCtxKey{}).(*SessionResponse); !ok {
+		err := errors.New("You are not authorized, what session is it for you?")
+		render.Render(w, r, ErrBadRequest(err))
+		return
+	}
+
+	sessionNew, _ := rs.session.Auth(r)
+	sessionResponse := &SessionResponse{}
+	sessionResponse.Bind(sessionNew)
+
+	render.Render(w, r, &SuccessResponse{
+		HTTPStatusCode: 201,
+		StatusText:     "Your session",
+		Payload:        sessionResponse,
+	})
+}
+
 //--
 // Struct
 //--
 
 // User sructure
 type User struct {
-	ID        int64  `json:"-" db:"u.id"`
-	Username  string `json:"username" db:"u.username"`
+	ID        int64  `json:"id" db:"u.id"`
+	Username  string `json:"-" db:"u.username"`
 	Password  string `json:"-" db:"u.password"`
 	CreatedAt int64  `json:"-" db:"u.created_at"`
 	Profile   struct {
@@ -226,15 +249,17 @@ func (u *User) Bind(r *http.Request) error {
 		return errors.New("Password confirmation does not match the password")
 	}
 
+	username := utils.EscapeString(r.FormValue("username"))
+
 	password, err := utils.HashPassword(r.FormValue("password"))
 	if err != nil {
 		return errors.New("Password to fucking shitty wtf")
 	}
 
 	u.Password = password
-	u.Username = r.FormValue("username")
+	u.Username = username
 	u.CreatedAt = time.Now().Unix()
-	u.Profile.ScreenName = r.FormValue("username")
+	u.Profile.ScreenName = username
 	u.States.IsBanned = false
 	u.States.IsDeleted = false
 	return nil

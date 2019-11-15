@@ -18,6 +18,8 @@ var (
 	host = os.Getenv("REDIS_HOST")
 	port = os.Getenv("REDIS_PORT")
 	pass = os.Getenv("REDIS_PASS")
+
+	authSessionID = "sid"
 )
 
 // NewSession - init new cookie storage
@@ -43,7 +45,7 @@ type Session struct {
 	rs *redistore.RediStore
 }
 
-// Auth - Прокси грубо говоря для стандартного Get с ключем "auth_session"
+// Auth - Прокси грубо говоря для стандартного Get с ключем authSessionID
 func (s *Session) Auth(r *http.Request) (*sessions.Session, error) {
-	return s.rs.Get(r, "auth_session")
+	return s.rs.Get(r, authSessionID)
 }

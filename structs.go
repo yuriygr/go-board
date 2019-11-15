@@ -99,20 +99,14 @@ func (s *SuccessResponse) Render(w http.ResponseWriter, r *http.Request) error {
 
 // SessionResponse - Состояние юзера
 type SessionResponse struct {
-	User struct {
-		ID         int64  `json:"id"`
-		Username   string `json:"username"`
-		ScreenName string `json:"screen_name"`
-	} `json:"user"`
+	User        User   `json:"user"`
 	Auth        bool   `json:"auth"`
 	Permissions string `json:"permissions"`
 }
 
 // Bind - Bind structure with session
 func (sr *SessionResponse) Bind(session *sessions.Session) {
-	sr.User.ID = session.Values["user_id"].(int64)
-	sr.User.Username = session.Values["username"].(string)
-	sr.User.ScreenName = session.Values["screenname"].(string)
+	sr.User = session.Values["user"].(User)
 	sr.Auth = session.Values["auth"].(bool)
 	sr.Permissions = ""
 }

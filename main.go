@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/gob"
 	"net/http"
 	"os"
 
@@ -12,7 +13,12 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
+// APIVersion1 - Const for api versions
+const APIVersion1 = "v1"
+
 func main() {
+	gob.Register(User{})
+
 	session := NewSession()
 	storage := NewStorage()
 	r := chi.NewRouter()
@@ -48,13 +54,13 @@ func main() {
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(AuthCtx(session))
-		r.Use(APIVersionCtx("v1"))
+		r.Use(APIVersionCtx(APIVersion1))
 		r.Mount("/boards", boardsResource{storage, session}.Routes())
 		r.Mount("/topics", topicsResource{storage, session}.Routes())
 		r.Mount("/pages", pagesResource{storage, session}.Routes())
 		r.Mount("/bugs", bugsResource{storage, session}.Routes())
 		r.Mount("/users", usersResource{storage, session}.Routes())
-		//r.Mount("/sessions", sessionResource{storage, session}.Routes())
+		r.Mount("/uploader", uploadResource{storage, session}.Routes())
 	})
 
 	http.ListenAndServe(":3000", r)
