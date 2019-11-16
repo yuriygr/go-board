@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/yuriygr/go-board/utils"
+
 	"github.com/go-chi/chi"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
@@ -17,7 +19,7 @@ import (
 const (
 	selectBoards         = "select b.* from boards as b"
 	selectPages          = "select p.* from pages as p"
-	selectTopics         = "select t.*, b.title, b.slug, COUNT(c.id) as comments_count, up.user_id, up.screen_name, count(f.id) as files_count from topics as t left join boards as b on t.board_id = b.id left join comments as c on c.topic_id = t.id left join users_profile as up on up.user_id = t.user_id left join topics_files as tf on tf.topic_id = t.id left join files as f on tf.file_id = f.id"
+	selectTopics         = "select t.*, b.title, b.slug, COUNT(c.id) as comments_count, up.user_id, up.screen_name, (select count(*) from files as f left join topics_files as tf on tf.file_id = f.id where tf.topic_id = t.id) as files_count from topics as t left join boards as b on t.board_id = b.id left join comments as c on c.topic_id = t.id left join users_profile as up on up.user_id = t.user_id"
 	selectComments       = "select c.*, up.screen_name from comments as c left join users_profile as up on up.user_id = c.user_id"
 	selectUsers          = "select u.*, up.screen_name, up.sex from users as u left join users_profile as up on up.user_id = u.id"
 	selectUsersStatistic = "select us.*, u.created_at from users_stats as us left join users as u on us.user_id = u.id"
@@ -115,8 +117,8 @@ func (s *Storage) GetPageBySlug(slug string) (*Page, error) {
 type TopicsRequest struct {
 	Slug  string
 	Sort  string
-	Page  int
-	Limit int
+	Page  int64
+	Limit int64
 }
 
 // Bind - Bind HTTP request data and validate it
@@ -127,14 +129,14 @@ func (tr *TopicsRequest) Bind(r *http.Request) error {
 	}
 
 	if page := r.URL.Query().Get("page"); page != "" {
-		if pageInt, err := strconv.Atoi(page); err == nil {
-			tr.Page = pageInt
+		if pageInt, err := strconv.ParseInt(page, 10, 64); err == nil {
+			tr.Page = utils.Abs(pageInt)
 		}
 	}
 
 	if limit := r.URL.Query().Get("limit"); limit != "" {
-		if limitInt, err := strconv.Atoi(limit); err == nil {
-			tr.Limit = limitInt
+		if limitInt, err := strconv.ParseInt(limit, 10, 64); err == nil {
+			tr.Limit = utils.Abs(limitInt)
 		}
 	}
 
@@ -163,6 +165,8 @@ func (s *Storage) GetTopicsList(request *TopicsRequest) ([]*Topic, error) {
 	for _, topic := range topics {
 		if topic.FilesCount > 0 {
 			topic.Attachments = s.GetTopicFiles(topic)
+		} else {
+			topic.Attachments = []*File{}
 		}
 	}
 

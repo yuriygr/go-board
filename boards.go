@@ -75,7 +75,7 @@ func (b *Board) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// NewBoardsListResponse
+// NewBoardsListResponse - Условности CHI
 func NewBoardsListResponse(boards []*Board) []render.Renderer {
 	list := []render.Renderer{}
 	for _, board := range boards {

@@ -64,6 +64,7 @@ type File struct {
 	Resolution string `json:"resolution" db:"-"`
 }
 
+// ImageDimensions - Чтобы удобнее было жить нам. Мне.
 type ImageDimensions struct {
 	Width  int
 	Height int
