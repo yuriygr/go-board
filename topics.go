@@ -44,7 +44,8 @@ func (rs topicsResource) Routes() chi.Router {
 // TopicsCtxKey - Key for context
 type TopicsCtxKey struct{}
 
-// PaginationCtx middleware для пагинации топиков
+// PaginationCtx - Осуществляет пагинацию и выборку топиков.
+// Параметры берутся из Request.
 func (rs *topicsResource) PaginationCtx(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		request := &TopicsRequest{Sort: "bumped_at", Page: 1, Limit: 30} // Initial state
@@ -121,7 +122,7 @@ func (rs *topicsResource) CommentsCtx(next http.Handler) http.Handler {
 // Handler methods
 //--
 
-// TopicsList - Вывод списка топиков
+// TopicsList - Вывод списка топиков исходя из контекста.
 func (rs *topicsResource) TopicsList(w http.ResponseWriter, r *http.Request) {
 	topics := r.Context().Value(TopicsCtxKey{}).([]*Topic)
 
@@ -131,7 +132,7 @@ func (rs *topicsResource) TopicsList(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// TopicGet - Вывод объекта топика
+// TopicGet - Вывод объекта топика исходя из контекста.
 func (rs *topicsResource) TopicGet(w http.ResponseWriter, r *http.Request) {
 	topic := r.Context().Value(TopicCtxKey{}).(*Topic)
 
@@ -294,7 +295,7 @@ func (t *Topic) Render(w http.ResponseWriter, r *http.Request) error {
 	t.States.IsFavorited = false
 
 	for _, file := range t.Attachments {
-		host := os.Getenv("STORAGE_HOST")
+		host := os.Getenv("STORAGE_HOST") + "images"
 		file.Origin = fmt.Sprintf("%s/%s.%s", host, file.UUID, file.Type)
 		file.Thumb = fmt.Sprintf("%s/%s-thumb.%s", host, file.UUID, file.Type)
 		file.Resolution = fmt.Sprintf("%dx%d", file.Width, file.Height)

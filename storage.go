@@ -125,7 +125,7 @@ type TopicsRequest struct {
 func (tr *TopicsRequest) Bind(r *http.Request) error {
 
 	if slug := r.URL.Query().Get("slug"); slug != "" {
-		tr.Slug = slug
+		tr.Slug = utils.EscapeString(slug)
 	}
 
 	if page := r.URL.Query().Get("page"); page != "" {

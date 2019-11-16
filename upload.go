@@ -73,7 +73,7 @@ type ImageDimensions struct {
 
 // Render - Render, wtf
 func (f *File) Render(w http.ResponseWriter, r *http.Request) error {
-	host := os.Getenv("STORAGE_HOST")
+	host := os.Getenv("STORAGE_HOST") + "images"
 	f.Origin = fmt.Sprintf("%s/%s.%s", host, f.UUID, f.Type)
 	f.Thumb = fmt.Sprintf("%s/%s-thumb.%s", host, f.UUID, f.Type)
 	f.Resolution = fmt.Sprintf("%dx%d", f.Width, f.Height)
