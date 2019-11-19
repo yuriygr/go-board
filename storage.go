@@ -130,13 +130,13 @@ func (tr *TopicsRequest) Bind(r *http.Request) error {
 
 	if page := r.URL.Query().Get("page"); page != "" {
 		if pageInt, err := strconv.ParseInt(page, 10, 64); err == nil {
-			tr.Page = utils.Abs(pageInt)
+			tr.Page = utils.LimitMinValue(utils.Abs(pageInt), 1)
 		}
 	}
 
 	if limit := r.URL.Query().Get("limit"); limit != "" {
 		if limitInt, err := strconv.ParseInt(limit, 10, 64); err == nil {
-			tr.Limit = utils.Abs(limitInt)
+			tr.Limit = utils.LimitMaxValue(utils.Abs(limitInt), 64)
 		}
 	}
 
@@ -251,9 +251,12 @@ type CommentsRequest struct {
 func (cr *CommentsRequest) Bind(r *http.Request) error {
 
 	if topicID := chi.URLParam(r, "topicID"); topicID != "" {
-		topicID, _ := strconv.Atoi(topicID)
-		cr.TopicID = topicID
-	} else {
+		if topicIDInt, err := strconv.Atoi(topicID); err == nil {
+			cr.TopicID = topicIDInt
+		}
+	}
+
+	if cr.TopicID == 0 {
 		return errors.New("ID needed")
 	}
 
