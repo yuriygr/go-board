@@ -1,10 +1,14 @@
 package uploader
 
 import (
+	"bytes"
+	"crypto/md5"
+	"fmt"
 	"image"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"io/ioutil"
 
 	"io"
 	"mime/multipart"
@@ -22,6 +26,7 @@ type ImageDimensions struct {
 	Width  int
 	Height int
 	Size   int64
+	Md5    string
 }
 
 // WriteImageFile - Write file to path
@@ -53,12 +58,23 @@ func ImageDimensionsByPath(path string) (*ImageDimensions, error) {
 		return nil, err
 	}
 
-	image, _, err := image.DecodeConfig(file)
+	var fileBuffer bytes.Buffer
+	tee := io.TeeReader(file, &fileBuffer)
+	hash := md5.New()
+	fileReaderBuffer, _ := ioutil.ReadAll(&fileBuffer)
+	_, err = io.Copy(hash, bytes.NewReader(fileReaderBuffer))
+	if err != nil {
+		return nil, err
+	}
+	md5 := fmt.Sprintf("%x", hash.Sum(nil))
+
+	fileReader, _ := ioutil.ReadAll(tee)
+	image, _, err := image.DecodeConfig(bytes.NewReader(fileReader))
 	if err != nil {
 		return nil, err
 	}
 
-	return &ImageDimensions{image.Width, image.Height, stat.Size()}, nil
+	return &ImageDimensions{image.Width, image.Height, stat.Size(), md5}, nil
 }
 
 // ImageDimensionsByFile - Get file dimensions
@@ -73,5 +89,5 @@ func ImageDimensionsByFile(file *os.File) (*ImageDimensions, error) {
 		return nil, err
 	}
 
-	return &ImageDimensions{image.Width, image.Height, stat.Size()}, nil
+	return &ImageDimensions{image.Width, image.Height, stat.Size(), ""}, nil
 }

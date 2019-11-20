@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	reNewLines = `\r?\n`
+	reNewLines       = `\r?\n`
 	reReduceNewLines = `(<br(?: \/)?>\s*){3,}`
-	reURL = `(http|ftp|https):\/\/([\w\p{L}\-_]+(?:(?:\.[\w\p{L}\-_]+)+))([\w\p{L}\-\.,@?^=%&amp;:/~\+#]*[\w\p{L}\-\@?^=%&amp;/~\+#])?`
+	reURL            = `(http|ftp|https):\/\/([\w\p{L}\-_]+(?:(?:\.[\w\p{L}\-_]+)+))([\w\p{L}\-\.,@?^=%&amp;:/~\+#]*[\w\p{L}\-\@?^=%&amp;/~\+#])?`
 )
 
 // FormatMessage - Форматирование текста в около html
@@ -43,4 +43,10 @@ func Nl2br(str string) string {
 func ReduceNewLines(str string) string {
 	re := regexp.MustCompile(reReduceNewLines)
 	return re.ReplaceAllString(str, `<br><br>`)
+}
+
+// Markup - Форматирование разметки
+// a.k.a. корень всего зла
+func Markup(str string) string {
+	return str
 }

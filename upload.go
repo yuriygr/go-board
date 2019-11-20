@@ -120,7 +120,7 @@ func UploadFile(r *http.Request) (*File, error) {
 	// And create struct
 	f := File{}
 	f.UUID = uuid.String()
-	f.Md5 = HashFileMd5("s")
+	f.Md5 = dimensions.Md5
 	f.Name = handler.Filename
 	f.Type = extension
 	f.Size = dimensions.Size
@@ -129,9 +129,4 @@ func UploadFile(r *http.Request) (*File, error) {
 	f.CreatedAt = time.Now().Unix()
 
 	return &f, nil
-}
-
-// HashFileMd5 - Return MD5 hash for fle
-func HashFileMd5(f string) string {
-	return f
 }

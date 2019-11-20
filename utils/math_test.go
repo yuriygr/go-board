@@ -3,9 +3,23 @@ package utils
 import "testing"
 
 func TestAbs(t *testing.T) {
-	got := Abs(-1)
-	if got != 1 {
-		t.Errorf("Abs(-1) = %d; want 1", got)
+	testCases := []struct {
+		name string
+		got  int64
+		want int64
+	}{
+		{"Abs(-1)", -10, 10},
+		{"Abs(50)", 50, 50},
+		{"Abs(0)", 0, 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Abs(tc.got)
+			if got != tc.want {
+				t.Errorf("got %d; want %d", tc.got, tc.want)
+			}
+		})
 	}
 }
 
