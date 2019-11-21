@@ -23,7 +23,7 @@ func TestEscapeString(t *testing.T) {
 	}
 }
 
-func TestMakeURL(t *testing.T) {
+func TestMarkupURLs(t *testing.T) {
 	testCases := []struct {
 		name string
 		got  string
@@ -37,7 +37,7 @@ func TestMakeURL(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := MakeURL(tc.got)
+			got := MarkupURLs(tc.got)
 			if got != tc.want {
 				t.Errorf("got %s; want %s", got, tc.want)
 			}
@@ -64,6 +64,27 @@ func TestMarkup(t *testing.T) {
 			if got != tc.want {
 				t.Errorf("got %s; want %s", got, tc.want)
 			}
+		})
+	}
+}
+
+func TestExtractHashtags(t *testing.T) {
+	testCases := []struct {
+		name string
+		got  string
+		want []string
+	}{
+		{"Star Wars", `#jedi #star #wars #hello_there`, []string{"jedi", "star", "wars", "hello_there"}},
+		{"Deduplicate", `#jedi #jedi #jedi`, []string{"jedi"}},
+		{"Only _", `#____`, []string{""}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ExtractHashtags(tc.got)
+			//if got != tc.want {
+			t.Errorf("got %s; want %s", got, tc.want)
+			//}
 		})
 	}
 }
